@@ -1,84 +1,101 @@
-const { Agent, Connection, IssueCredential, CredentialDefinition, Credential, Schema, PresentProofV1 } = require("indy-request-js");
+const { Agent, Connection, IssueCredential, CredentialDefinition, Credential, Schema, PresentProofV1, Wallet } = require("indy-request-js");
 
 async function main(){
-  let aliceAgent = new Agent('http', 'localhost', '8031')
-  let faberAgent = new Agent('http', 'localhost', '8021')
+  let aliceAgent = new Agent('http', 'localhost', '8021')
+  let faberAgent = new Agent('http', 'localhost', '8031')
   
   let connectionWithAlice = new Connection(aliceAgent);
   let connectionWithFaber = new Connection(faberAgent);
 
   // 1.1 FaberからAliceへConnectionの招待
-  let connectionInvitationResponse = await connectionWithAlice.createInvitation({ alias: "Hello Alice" });
-  console.log('connectionInvitationResponse: ' + connectionInvitationResponse)
-  let conn_id = connectionInvitationResponse.connection_id;
+  let connectionInvitationResponse = await connectionWithAlice.createInvitation({ auto_accept:true, alias: "Hello Alice" });
+  let connectionInvitationResponseJSON = JSON.parse(JSON.stringify(connectionInvitationResponse));
+  let conn_id = connectionInvitationResponseJSON.result.connection_id;
+  let serviceEndpoint = connectionInvitationResponseJSON.result.invitation.serviceEndpoint;
+  let recipientKeys = connectionInvitationResponseJSON.result.invitation.recipientKeys;
+
 
   // 1.2
-  let connectinList = await connectionWithAlice.getList();
-  console.log('connectinList: '+connectinList);
+  let connectinList = await connectionWithAlice.getList({});
+  // console.log('connectinList: '+ JSON.stringify(connectinList));
 
-  // 1.3
-  let receiveInvitation = {
-    comment: "Hello Faber",
-    credential_proposal: {
-      "@type": "did:sov:BzCbsNYhMrjHiqZDTUASHg;spec/issue-credential/1.0/credential-preview",
-      attributes: [
-        {
-          "name": "favourite_drink",
-          "mime-type": "image/jpeg",
-          "value": "martini"
-        }
-      ]
-    }
-  }
-  let receiveInvitationResponse = connectionWithAlice.receiveInvitation({}, receiveInvitation);
-  console.log('receiveInvitationResponse: '+receiveInvitationResponse)
+  let aliceWallet = new Wallet(aliceAgent);
+  // let aliceDidCreateResponse = await aliceWallet.didCreate({method: "sov", options: { key_type: "ed25519" }});
+  // console.log(aliceDidCreateResponse)
+
+  let aliceDidsResponse = await aliceWallet.did({});
+  let aliceDidsResponseJSON = JSON.parse(JSON.stringify(aliceDidsResponse));
+  let did = aliceDidsResponseJSON.results[aliceDidsResponseJSON.results.length-1].did;
+  let verkey = aliceDidsResponseJSON.results[aliceDidsResponseJSON.results.length-1].verkey;
+  let connectionInvitationResponseJSONValues = Object.values(connectionInvitationResponseJSON.result.invitation);
+  let id = connectionInvitationResponseJSONValues[1]
+  console.log(id)
+
+  
+  // let getDidEndpointResponse = await aliceWallet.getDidEndpoint(did);
+  // let getDidEndpointResponseJSON = JSON.parse(JSON.stringify(getDidEndpointResponse));
+  // let endpoint = getDidEndpointResponseJSON.result.endpoint;
+  // console.log(endpoint)
+
+  // let faberWallet = new Wallet(faberAgent);
+
+  // 1.3 
+  // let receiveInvitation = {
+  //   "@id": id,
+  //   "@type": 'did:sov:'+did+";spec/connections/1.0/invitation",
+  //   serviceEndpoint,
+  //   label: "Faber.Agent",
+  //   recipientKeys
+  // }
+  // console.log(receiveInvitation)
+  // let receiveInvitationResponse = connectionWithAlice.receiveInvitation({auto_accept: true}, receiveInvitation);
+  // console.log('receiveInvitationResponse: '+ JSON.stringify(receiveInvitationResponse));
 
   // 1.4 招待の受け入れ
   //    (招待を受け取った側)
-  let acceptInvitationByAliceResponse = await connectionWithFaber.acceptInvitation(conn_id, {});
-  console.log('acceptInvitationByAliceResponse: '+acceptInvitationByAliceResponse);
-  //　　　(招待を送った側)
-  let acceptInvitationByFarberResponse = await connectionWithAlice.acceptInvitation(conn_id, {});
-  console.log('acceptInvitationByFarberResponse: '+acceptInvitationByFarberResponse);
+  // let acceptInvitationByAliceResponse = await connectionWithFaber.acceptInvitation(conn_id, {});
+  // console.log('acceptInvitationByAliceResponse: '+ JSON.stringify(acceptInvitationByAliceResponse));
+  // //　　　(招待を送った側)
+  // let acceptInvitationByFarberResponse = await connectionWithAlice.acceptInvitation(conn_id, {});
+  // console.log('acceptInvitationByFarberResponse: '+JSON.stringify(acceptInvitationByFarberResponse));
 
-  let connectinList = await connectionWithAlice.getList();
-  console.log('connectinList: '+connectinList);
+  // connectinList = await connectionWithAlice.getList();
+  // console.log('connectinList: '+JSON.stringify(connectinList));
 
   // 2.1 VCスキーマ定義
-  let schema = new Schema(faberAgent);
+  let schema = new Schema(aliceAgent);
   let schemaCreateRequestBody = {
-      attribute: [
+    attributes: [
       "name",
       "timestamp",
       "date",
       "degree",
       "age"
-      ],
-      schema_name: "degree",
-      schema_version: "1.0"
+    ],
+    schema_name: "original",
+    schema_version: "1.0"
   };
-  let schemaCreateResponse = await schema.create({ conn_id}, schemaCreateRequestBody)
-  console.log('schemaCreateResponse: '+schemaCreateResponse);
+  // let schemaCreateResponse = await schema.create({ conn_id }, schemaCreateRequestBody)
+  // console.log('schemaCreateResponse: '+JSON.stringify(schemaCreateResponse));
 
   // 2.2 スキーマの確認
-  let schemaCreatedResponse = await schema.created()
-  console.log('schemaCreatedResponse: '+schemaCreatedResponse);
+  let schemaCreatedResponse = await schema.created({});
+  console.log('schemaCreatedResponse: '+JSON.stringify(schemaCreatedResponse));
+  let schema_id = schemaCreatedResponse.result.schema_ids[0];
 
-  let credntialDefinition = new CredentialDefinition();
-  let credntialDefinitionResponse = await credntialDefinition.created()
-  console.log('credntialDefinitionResponse: '+ credntialDefinitionResponse);
-  let cred_def_id = credntialDefinitionResponse.cred_def_id;
-
-  let schema_id = credntialDefinitionResponse.schema_ids[0];
+  let credntialDefinition = new CredentialDefinition(aliceAgent);
+  let credntialDefinitionResponse = await credntialDefinition.created({})
+  console.log('credntialDefinitionResponse: '+ JSON.stringify(credntialDefinitionResponse));
+  
 
   // 3.1
   let isuueCredentialByFarber = new IssueCredential(faberAgent);
   let isuueCredentialRequestBody = {
       schema_version: "1.0",
       schema_id: schema_id,
-      cred_def_id: cred_def_id,
+      cred_def_id: schema_id,
       credential_proposal: {
-          "@type": "",
+          "@type": 'did:sov:'+did+";spec/connections/1.0/invitation",
           attributes: [
               { name: "name", value: "Alice Jhonson" },
               { name: "timestamp", value: "12345678" },
@@ -94,21 +111,21 @@ async function main(){
       trace: false,
       comment: "This is a comment"
   }
-  let issueCredentialResponse = await isuueCredentialByFarber.send(isuueCredentialRequestBody);
-  console.log('issueCredentialResponse: '+issueCredentialResponse);
+  let issueCredentialSendResponse = await isuueCredentialByFarber.send(isuueCredentialRequestBody);
+  console.log('issueCredentialResponse: '+JSON.stringify(issueCredentialSendResponse));
 
   // 4
-  let issueCredentialResponse = await isuueCredentialByFarber.records();
-  console.log(issueCredentialResponse);
+  let issueCredentialRecordsResponse = await isuueCredentialByFarber.records();
+  console.log('issueCredentialRecordsResponse: '+JSON.stringify(issueCredentialRecordsResponse));
 
   // 5
   let issueCredentialByAlice = new IssueCredential(aliceAgent);
   let recordsStoreResponse = await issueCredentialByAlice.recordsStore(cred_def_id, {});
-  console.log('recordsStoreResponse: '+ recordsStoreResponse);
+  console.log('recordsStoreResponse: '+ JSON.stringify(recordsStoreResponse));
 
   let credential = new Credential(aliceAgent);
   let credentialsResponse = await credential.getList({});
-  console.log('credentialsResponse: '+ credentialsResponse);
+  console.log('credentialsResponse: '+ JSON.stringify(credentialsResponse));
 
 
   // Proofの要求
@@ -149,15 +166,15 @@ async function main(){
   };
   let presentProofByFaber = new PresentProofV1(faberAgent);
   let presentProofSendRequestResponse = await presentProofByFaber.sendRequest(presentProofByFaber);
-  console.log('presentProofSendRequestResponse: '+presentProofSendRequestResponse);
+  console.log('presentProofSendRequestResponse: '+ JSON.stringify(presentProofSendRequestResponse));
 
 
   let presentProofByAlice = new PresentProofV1(aliceAgent);
   let presentProofSendPresentationResponse = await presentProofByAlice.recordsSendPresentation();
-  console.log(presentProofSendPresentationResponse);
+  console.log('presentProofSendPresentationResponse: '+JSON.stringify(presentProofSendPresentationResponse));
 
 
   let presentProofRecordResponse = await presentProofByFaber.record(pres_ex_id);
-  console.log(presentProofRecordResponse);
+  console.log('presentProofRecordResponse: ' +JSON.stringify(presentProofRecordResponse));
 }
 main()
