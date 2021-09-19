@@ -1,51 +1,91 @@
 const { Agent, Connection, IssueCredential, CredentialDefinition, Credential, Schema, PresentProofV1, Wallet } = require("indy-request-js");
 
 
-
-
 function preperAgents(){
-  let aliceAgent = new Agent('http', 'localhost', '8021')
-  let faberAgent = new Agent('http', 'localhost', '8031')
+  let alice = new Agent('http', 'localhost', '8031')
+  let faber = new Agent('http', 'localhost', '8021')
   return {
-    aliceAgent,
-    faberAgent
+    alice,
+    faber
   }
 }
 
-async function createConnectionProcess(alice, faber){
-  let connectionWithAlice = new Connection(alice);
-  let connectionWithFaber = new Connection(faber);
+async function createInvitationProcess(faber){
+  let connection = new Connection(faber);
   
-  let connectionInvitationResponse = await connectionWithAlice.createInvitation({ auto_accept:true, alias: "Hello Alice" });
-  let connectionInvitationResponseJSON = JSON.parse(JSON.stringify(connectionInvitationResponse));
-  let serviceEndpoint = connectionInvitationResponseJSON.result.invitation.serviceEndpoint;
-  let recipientKeys = connectionInvitationResponseJSON.result.invitation.recipientKeys;
-
-  let aliceWallet = new Wallet(alice);
-  let aliceDidsResponse = await aliceWallet.did({});
-  let aliceDidsResponseJSON = JSON.parse(JSON.stringify(aliceDidsResponse));
-  let did = aliceDidsResponseJSON.results[aliceDidsResponseJSON.results.length-1].did;
-  let verkey = aliceDidsResponseJSON.results[aliceDidsResponseJSON.results.length-1].verkey;
-  let connectionInvitationResponseJSONValues = Object.values(connectionInvitationResponseJSON.result.invitation);
-  let id = connectionInvitationResponseJSONValues[1]
-  console.log(id)
-
-  let receiveInvitation = {
-    "@id": id,
-    "@type": 'did:sov:'+did+";spec/connections/1.0/invitation",
-    serviceEndpoint,
-    label: "Faber.Agent",
-    recipientKeys
-  }
-  console.log(receiveInvitation)
-
-  let receiveInvitationResponse = connectionWithAlice.receiveInvitation({auto_accept: true}, receiveInvitation);
-  console.log('receiveInvitationResponse: '+ JSON.stringify(receiveInvitationResponse));
+  let connectionInvitationResponse = await connection.createInvitation();
+  return connectionInvitationResponse;
 }
 
+async function receiveInvitationProcess(alice, invitation_id, serviceEndpoint, label, recipientKeys){
+  let connection = new Connection(alice);
 
-let agents  = preperAgents();
-createConnectionProcess(agents.aliceAgent, agents.faberAgent);
+  // let wallet = new Wallet(alice);
+  // let didsResponse = await wallet.did({});
+  // let didsResponseJSON = JSON.parse(JSON.stringify(didsResponse));
 
+  let receiveInvitationRequest = {
+    "@id": invitation_id,
+    label,
+    recipientKeys,
+    serviceEndpoint
+  }
+  console.log(receiveInvitationRequest)
 
+  let receiveInvitationResponse = await connection.receiveInvitation({}, receiveInvitationRequest);
+  console.log('receiveInvitationResponse: '+JSON.stringify(receiveInvitationResponse));
+  return receiveInvitationResponse;
+}
+
+async function acceptInvitationProcess(agent, conn_id) {
+  let connection = new Connection(agent);
+  let acceptInvitationResponse = await connection.acceptInvitation(conn_id, {})
+  console.log('acceptInvitationResponse: '+JSON.stringify(acceptInvitationResponse));
+  return acceptInvitationResponse;
+}
+
+async function acceptRequestProcess(alice, conn_id) {
+  let connection = new Connection(alice);
+  let acceptRequestResponce = await connection.acceptRequest(conn_id, {});
+  return acceptRequestResponce;
+}
+
+async function getConnectionList(agent){
+  let connection = new Connection(agent);
+  connectinList = await connection.getList({});
+  return connectinList;
+} 
+
+async function main() {
+  let connections;
+  let agents  = preperAgents();
+  let invitationResult = await createInvitationProcess(agents.faber);
+  console.log(invitationResult)
+  let invitationResultValues = Object.values(invitationResult.result.invitation);
+  let fabers_connection_id = invitationResult.result.connection_id;
+  let invitation_id = invitationResultValues[1];
+  let serviceEndpoint = invitationResult.result.invitation.serviceEndpoint;
+  let label = invitationResult.result.invitation.label;
+  let recipientKeys = invitationResult.result.invitation.recipientKeys;
+
+  console.log("++++++++++++++++++++++++++++")
+  console.log(fabers_connection_id)
+  console.log(invitation_id)
+  console.log(serviceEndpoint)
+  console.log(label)
+  console.log(recipientKeys)
+  console.log("++++++++++++++++++++++++++++")
+  
+  receiveInvitationResponse = await receiveInvitationProcess(agents.alice, invitation_id, serviceEndpoint, label, recipientKeys)
+
+  console.log(receiveInvitationResponse.result.connection_id)
+  connection_id = receiveInvitationResponse.result.connection_id
+  // await acceptInvitationProcess(agents.alice, connection_id);
+
+  // await acceptInvitationProcess(agents.faber, connection_id);
+
+  // await acceptRequestProcess(agents.faber, connection_id);
+}
+
+main()
 
